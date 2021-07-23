@@ -935,6 +935,12 @@ class AzurePlatform(Platform):
             parameters=parameters,
         )
 
+        #dump arm_template and arm_parameters to file #..\\..\\..\\runtime\\runs\\armtemplate.txt
+        dump_file = open("runtime/runs/arm_dump.txt", "w")
+        dump_file.write("arm_template\n" + json.dumps(template))
+        dump_file.write("\n\narm_parameters\n" + json.dumps(parameters))
+        dump_file.close()
+
         return (
             arm_parameters.location,
             {
