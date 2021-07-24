@@ -25,6 +25,21 @@ from .common import (
     wait_operation,
 )
 
+MUTUALLY_EXCLUSIVE_FEATURES = {
+    features.DiskEphemeral.name(): [
+        features.DiskPremiumLRS.name(),
+        features.DiskStandardLRS.name(),
+    ],
+    features.DiskPremiumLRS.name(): [
+        features.DiskEphemeral.name(),
+        features.DiskStandardLRS.name(),
+    ],
+    features.DiskStandardLRS.name(): [
+        features.DiskEphemeral.name(),
+        features.DiskPremiumLRS.name(),
+    ],
+}
+
 
 class AzureFeatureMixin:
     def _initialize_information(self, node: Node) -> None:
@@ -191,3 +206,33 @@ class Nvme(AzureFeatureMixin, features.Nvme):
     def _initialize(self, *args: Any, **kwargs: Any) -> None:
         super()._initialize(*args, **kwargs)
         self._initialize_information(self._node)
+
+
+class DiskEphemeral(AzureFeatureMixin, features.DiskEphemeral):
+    def _initialize(self, *args: Any, **kwargs: Any) -> None:
+        super()._initialize(*args, **kwargs)
+        self._initialize_information(self._node)
+
+    @staticmethod
+    def get_disk_id() -> str:
+        return "Ephemeral"
+
+
+class DiskPremiumLRS(AzureFeatureMixin, features.DiskPremiumLRS):
+    def _initialize(self, *args: Any, **kwargs: Any) -> None:
+        super()._initialize(*args, **kwargs)
+        self._initialize_information(self._node)
+
+    @staticmethod
+    def get_disk_id() -> str:
+        return "Premium_LRS"
+
+
+class DiskStandardLRS(AzureFeatureMixin, features.DiskStandardLRS):
+    def _initialize(self, *args: Any, **kwargs: Any) -> None:
+        super()._initialize(*args, **kwargs)
+        self._initialize_information(self._node)
+
+    @staticmethod
+    def get_disk_id() -> str:
+        return "Standard_LRS"

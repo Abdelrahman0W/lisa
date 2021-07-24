@@ -278,6 +278,9 @@ class AzurePlatform(Platform):
     def supported_features(cls) -> List[Type[Feature]]:
         return [
             features.Gpu,
+            features.DiskEphemeral,
+            features.DiskPremiumLRS,
+            features.DiskStandardLRS,
             features.Nvme,
             features.SerialConsole,
             features.Sriov,
@@ -301,7 +304,6 @@ class AzurePlatform(Platform):
         3. check capability for each node by order of pattern.
         4. get min capability for each match
         """
-
         is_success: bool = True
 
         if environment.runbook.nodes_requirement:
@@ -316,6 +318,21 @@ class AzurePlatform(Platform):
 
             # check locations
             for req in nodes_requirement:
+                # If no disk type feature is specified, use DiskPremiumLRS
+                if req.features is None:
+                    req.features = search_space.SetSpace[str](is_allow_set=True)
+                    req.features.add(features.DiskStandardLRS.name())
+                else:
+                    if (
+                        not req.features.__contains__(features.DiskEphemeral.name())
+                        and not req.features.__contains__(
+                            features.DiskPremiumLRS.name()
+                        )
+                        and not req.features.__contains__(
+                            features.DiskStandardLRS.name()
+                        )
+                    ):
+                        req.features.add(features.DiskStandardLRS.name())
                 # apply azure specified values
                 # they will pass into arm template
                 node_runbook: AzureNodeSchema = req.get_extended_runbook(
@@ -358,7 +375,11 @@ class AzurePlatform(Platform):
                     for azure_cap in location_info.capabilities:
                         if azure_cap.vm_size == node_runbook.vm_size:
                             predefined_cost += azure_cap.estimated_cost
-
+                            azure_cap = (
+                                AzurePlatform._remove_mutually_exclusive_features(
+                                    req, azure_cap, features.MUTUALLY_EXCLUSIVE_FEATURES
+                                )
+                            )
                             min_cap: schema.NodeSpace = req.generate_min_capability(
                                 azure_cap.capability
                             )
@@ -409,6 +430,11 @@ class AzurePlatform(Platform):
 
                         check_result = req.check(azure_cap.capability)
                         if check_result.result:
+                            azure_cap = (
+                                AzurePlatform._remove_mutually_exclusive_features(
+                                    req, azure_cap, features.MUTUALLY_EXCLUSIVE_FEATURES
+                                )
+                            )
                             min_cap = req.generate_min_capability(azure_cap.capability)
 
                             # apply azure specified values
@@ -895,6 +921,10 @@ class AzurePlatform(Platform):
                 azure_node_runbook.purchase_plan = self._process_marketplace_image_plan(
                     azure_node_runbook.location, azure_node_runbook.marketplace
                 )
+
+            # Set disk type
+            azure_node_runbook.disk_type = AzurePlatform._get_disk_type(node_space)
+
             # save parsed runbook back, for example, the version of marketplace may be
             # parsed from latest to a specified version.
             node.capability.set_extended_runbook(azure_node_runbook)
@@ -1241,6 +1271,12 @@ class AzurePlatform(Platform):
                 if eval(sku_capability.value) is True:
                     # update features list if sriov feature is supported
                     node_space.features.update([features.Sriov.name()])
+            elif name == "PremiumIO":
+                if eval(sku_capability.value) is True:
+                    node_space.features.update([features.DiskPremiumLRS.name()])
+            elif name == "EphemeralOSDiskSupported":
+                if eval(sku_capability.value) is True:
+                    node_space.features.update([features.DiskEphemeral.name()])
 
         # set a min value for nic_count work around for an azure python sdk bug
         # nic_count is 0 when get capability for some sizes e.g. Standard_D8a_v3
@@ -1249,7 +1285,11 @@ class AzurePlatform(Platform):
 
         # all nodes support following features
         node_space.features.update(
-            [features.StartStop.name(), features.SerialConsole.name()]
+            [
+                features.StartStop.name(),
+                features.SerialConsole.name(),
+                features.DiskStandardLRS.name(),
+            ]
         )
 
         return node_space
@@ -1402,3 +1442,29 @@ class AzurePlatform(Platform):
             wait_copy_blob(blob_client, vhd_path, log)
 
         return full_vhd_path
+
+    @staticmethod
+    def _remove_mutually_exclusive_features(
+        req_cap: Any, azure_cap: Any, mutually_exclusive_features: Dict[str, List[str]]
+    ) -> Any:
+        if req_cap.features is None:
+            return azure_cap
+        cap = copy.deepcopy(azure_cap)
+        cap.capability.features.update(
+            copy.deepcopy(azure_cap.capability.features.items)
+        )
+        for req_feature in req_cap.features:
+            if mutually_exclusive_features.get(req_feature) is not None:
+                for me_feature in mutually_exclusive_features[req_feature]:
+                    cap.capability.features.discard(me_feature)
+        return cap
+
+    @staticmethod
+    def _get_disk_type(node_space: schema.NodeSpace) -> str:
+        node_features = node_space.features
+        if node_features is not None:
+            if features.DiskEphemeral.name() in node_features:
+                return features.DiskEphemeral.get_disk_id()
+            elif features.DiskPremiumLRS.name() in node_features:
+                return features.DiskPremiumLRS.get_disk_id()
+        return features.DiskStandardLRS.get_disk_id()

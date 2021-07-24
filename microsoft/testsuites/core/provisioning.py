@@ -6,7 +6,7 @@ from typing import Optional
 
 from lisa import TestCaseMetadata, TestSuite, TestSuiteMetadata
 from lisa.environment import EnvironmentStatus
-from lisa.features import SerialConsole
+from lisa.features import DiskEphemeral, DiskPremiumLRS, DiskStandardLRS, SerialConsole
 from lisa.node import RemoteNode
 from lisa.testsuite import simple_requirement
 from lisa.util import LisaException, PassedException, SkippedException
@@ -29,26 +29,7 @@ from lisa.util.shell import wait_tcp_port_ready
 class Provisioning(TestSuite):
     TIME_OUT = 300
 
-    @TestCaseMetadata(
-        description="""
-        This case verifies whether a node is operating normally.
-
-        Steps,
-        1. Connect to TCP port 22. If it's not connectable, failed and check whether
-            there is kernel panic.
-        2. Connect to SSH port 22, and reboot the node. If there is an error and kernel
-            panic, fail the case. If it's not connectable, also fail the case.
-        3. If there is another error, but not kernel panic or tcp connection, pass with
-            warning.
-        4. Otherwise, fully passed.
-        """,
-        priority=0,
-        requirement=simple_requirement(
-            environment_status=EnvironmentStatus.Deployed,
-            supported_features=[SerialConsole],
-        ),
-    )
-    def smoke_test(self, case_name: str, node: RemoteNode) -> None:
+    def _smoke_test(self, case_name: str, node: RemoteNode) -> None:
         case_path: Optional[Path] = None
 
         if not node.is_remote:
@@ -89,3 +70,73 @@ class Provisioning(TestSuite):
             ):
                 raise LisaException(f"after reboot, {identifier}")
             raise PassedException(identifier)
+
+    @TestCaseMetadata(
+        description="""
+        This case verifies whether a node is operating normally.
+
+        Steps,
+        1. Connect to TCP port 22. If it's not connectable, failed and check whether
+            there is kernel panic.
+        2. Connect to SSH port 22, and reboot the node. If there is an error and kernel
+            panic, fail the case. If it's not connectable, also fail the case.
+        3. If there is another error, but not kernel panic or tcp connection, pass with
+            warning.
+        4. Otherwise, fully passed.
+        """,
+        priority=0,
+        requirement=simple_requirement(
+            environment_status=EnvironmentStatus.Deployed,
+            supported_features=[SerialConsole, DiskStandardLRS],
+        ),
+    )
+    def smoke_test(self, case_name: str, node: RemoteNode) -> None:
+        self._smoke_test(case_name, node)
+
+    @TestCaseMetadata(
+        description="""
+        This case verifies whether a node is operating normally.
+
+        Steps,
+        1. Connect to TCP port 22. If it's not connectable, failed and check whether
+            there is kernel panic.
+        2. Connect to SSH port 22, and reboot the node. If there is an error and kernel
+            panic, fail the case. If it's not connectable, also fail the case.
+        3. If there is another error, but not kernel panic or tcp connection, pass with
+            warning.
+        4. Otherwise, fully passed.
+        """,
+        priority=1,
+        requirement=simple_requirement(
+            environment_status=EnvironmentStatus.Deployed,
+            supported_features=[SerialConsole, DiskEphemeral],
+        ),
+    )
+    def verify_deployment_provision_ephemeral_managed_disk(
+        self, case_name: str, node: RemoteNode
+    ) -> None:
+        self._smoke_test(case_name, node)
+
+    @TestCaseMetadata(
+        description="""
+        This case verifies whether a node is operating normally.
+
+        Steps,
+        1. Connect to TCP port 22. If it's not connectable, failed and check whether
+            there is kernel panic.
+        2. Connect to SSH port 22, and reboot the node. If there is an error and kernel
+            panic, fail the case. If it's not connectable, also fail the case.
+        3. If there is another error, but not kernel panic or tcp connection, pass with
+            warning.
+        4. Otherwise, fully passed.
+        """,
+        priority=1,
+        requirement=simple_requirement(
+            environment_status=EnvironmentStatus.Deployed,
+            supported_features=[SerialConsole, DiskPremiumLRS],
+        ),
+    )
+    def verify_deployment_provision_premium_disk(
+        self, case_name: str, node: RemoteNode
+    ) -> None:
+        self._smoke_test(case_name, node)

@@ -88,6 +88,7 @@ class AzureNodeSchema:
     )
     vhd: str = ""
     nic_count: int = 1
+    disk_type: str = ""
 
     # for marketplace image, which need to accept terms
     purchase_plan: Optional[AzureVmPurchasePlanSchema] = None
